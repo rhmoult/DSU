@@ -24,7 +24,7 @@ async def proxy_generate(request: Request):
     prompt_id = str(uuid.uuid4())
     start_time = time.time()
 
-    timeout_seconds = 120.0
+    timeout_seconds = 180.0
     async with httpx.AsyncClient(timeout=timeout_seconds) as client:
         ollama_response = await client.post(ollama_url, json=data)
 
