@@ -27,6 +27,7 @@ dill==0.3.7
 distro==1.9.0
 ecoji==0.1.1
 exceptiongroup==1.2.2
+faiss-gpu==1.7.2
 fastapi==0.115.12
 fastavro==1.10.0
 filelock==3.18.0
@@ -132,6 +133,9 @@ rpds-py==0.24.0
 rsa==4.9
 s3transfer==0.11.4
 safetensors==0.5.3
+scikit-learn==1.6.1
+scipy==1.15.2
+sentence-transformers==4.0.1
 sentencepiece==0.2.0
 shortuuid==1.0.13
 six==1.17.0
@@ -143,6 +147,7 @@ stdlibs==2024.12.3
 svgwrite==1.4.3
 sympy==1.13.1
 tenacity==9.0.0
+threadpoolctl==3.6.0
 tiktoken==0.9.0
 tokenizers==0.21.1
 tomli==2.2.1
