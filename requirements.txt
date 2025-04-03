@@ -1,6 +1,6 @@
 accelerate==1.5.2
 aiohappyeyeballs==2.6.1
-aiohttp==3.11.12
+aiohttp==3.11.16
 aiosignal==1.3.2
 annotated-types==0.7.0
 anyio==4.9.0
@@ -20,6 +20,7 @@ click==8.1.8
 cmd2==2.4.3
 cohere==4.57
 colorama==0.4.6
+dataclasses-json==0.6.7
 datasets==2.16.1
 DateTime==5.5
 deepl==1.17.0
@@ -45,6 +46,7 @@ h11==0.14.0
 httpcore==1.0.7
 httplib2==0.22.0
 httpx==0.28.1
+httpx-sse==0.4.0
 huggingface-hub==0.30.1
 idna==3.10
 importlib-metadata==6.11.0
@@ -58,9 +60,10 @@ jsonpointer==3.0.0
 jsonschema==4.23.0
 jsonschema-specifications==2024.10.1
 langchain==0.3.22
-langchain-core==0.3.49
+langchain-community==0.3.20
+langchain-core==0.3.50
 langchain-text-splitters==0.3.7
-langsmith==0.3.21
+langsmith==0.3.23
 latex2mathml==3.77.0
 litellm==1.65.0
 lorem==0.1.1
@@ -68,15 +71,17 @@ Markdown==3.7
 markdown-it-py==3.0.0
 markdown2==2.5.3
 MarkupSafe==3.0.2
+marshmallow==3.26.1
 mdurl==0.1.2
 mpmath==1.3.0
 multidict==6.3.0
 multiprocess==0.70.15
+mypy-extensions==1.0.0
 nemollm==0.3.5
 networkx==3.4.2
 nh3==0.2.21
 nltk==3.9.1
-numpy==1.26.4
+numpy==2.2.4
 nvdlib==0.7.7
 nvidia-cublas-cu12==12.4.5.8
 nvidia-cuda-cupti-cu12==12.4.127
@@ -111,6 +116,7 @@ pyasn1==0.6.1
 pyasn1_modules==0.4.2
 pycparser==2.22
 pydantic==2.11.1
+pydantic-settings==2.8.1
 pydantic_core==2.33.0
 Pygments==2.19.1
 pyparsing==3.2.3
@@ -146,7 +152,7 @@ starlette==0.46.1
 stdlibs==2024.12.3
 svgwrite==1.4.3
 sympy==1.13.1
-tenacity==9.0.0
+tenacity==9.1.2
 threadpoolctl==3.6.0
 tiktoken==0.9.0
 tokenizers==0.21.1
@@ -157,6 +163,7 @@ transformers==4.50.3
 triton==3.2.0
 types-PyYAML==6.0.12.20250326
 types-requests==2.32.0.20250328
+typing-inspect==0.9.0
 typing-inspection==0.4.0
 typing_extensions==4.13.0
 tzdata==2025.2
