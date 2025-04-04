@@ -2,7 +2,7 @@
    "rest": {
       "RestGenerator": {
          "name": "DeepSeek-R1 API",
-         "uri": "http://localhost:8000/generate",
+         "uri": "http://localhost:8000/rag",
          "method": "post",
          "headers": {
             "Content-Type": "application/json"
