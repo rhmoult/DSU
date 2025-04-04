@@ -3,9 +3,10 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from transformers import AutoModelForCausalLM, AutoTokenizer, pipeline
 import torch
+import warnings
+
 from langchain_community.vectorstores import FAISS
-from langchain_huggingface import HuggingFaceEmbeddings
-from langchain_community.llms import HuggingFacePipeline
+from langchain_huggingface import HuggingFaceEmbeddings, HuggingFacePipeline
 from langchain.chains.question_answering import load_qa_chain
 
 # FastAPI setup
@@ -26,8 +27,17 @@ model = AutoModelForCausalLM.from_pretrained(
     low_cpu_mem_usage=True
 )
 
-# Generation pipeline (used by LLM and RAG fallback)
-qa_pipeline = pipeline("text-generation", model=model, tokenizer=tokenizer, max_new_tokens=256)
+# Prevent "Sliding Window Attention is enabled" warning
+if hasattr(model.config, "use_sliding_window"):
+    model.config.use_sliding_window = False
+
+# Build pipeline for HuggingFace
+qa_pipeline = pipeline(
+    "text-generation",
+    model=model,
+    tokenizer=tokenizer,
+    max_new_tokens=256
+)
 llm = HuggingFacePipeline(pipeline=qa_pipeline)
 
 # Load FAISS vector store and embeddings
@@ -38,10 +48,12 @@ vectorstore = FAISS.load_local(
     allow_dangerous_deserialization=True
 )
 
-# Load LangChain QA chain
-qa_chain = load_qa_chain(llm, chain_type="stuff")
+# Load LangChain QA chain with deprecation warning suppressed
+with warnings.catch_warnings():
+    warnings.simplefilter("ignore")
+    qa_chain = load_qa_chain(llm, chain_type="stuff")
 
-# Unified endpoint: RAG if enabled, fallback to LLM
+# Unified /rag endpoint: RAG (if enabled) + fallback to LLM
 @app.post("/rag")
 async def rag_smart_response(request: TextRequest):
     query = request.prompt
@@ -51,10 +63,18 @@ async def rag_smart_response(request: TextRequest):
         docs = vectorstore.similarity_search(query, k=5)
         if docs:
             result = qa_chain.run(input_documents=docs, question=query)
-            return JSONResponse(content={"response": result, "source": "retrieved_docs"})
+            return JSONResponse(content={
+                "response": result,
+                "source": "retrieved_docs"
+            })
 
-    # Fallback: direct generation
-    inputs = tokenizer(query, return_tensors="pt", truncation=True, max_length=512).to("cuda")
+    # Fallback to LLM-only generation
+    inputs = tokenizer(
+        query,
+        return_tensors="pt",
+        truncation=True,
+        max_length=512
+    ).to("cuda")
     output = model.generate(
         **inputs,
         max_new_tokens=256,
@@ -65,7 +85,7 @@ async def rag_smart_response(request: TextRequest):
         do_sample=True,
         top_k=50,
         top_p=0.9,
-        early_stopping=False
+        early_stopping=False  # no effect with num_beams=1, suppresses warning
     )
     generated_text = tokenizer.decode(output[0], skip_special_tokens=True)
 
