@@ -53,6 +53,9 @@ with warnings.catch_warnings():
     warnings.simplefilter("ignore")
     qa_chain = load_qa_chain(llm, chain_type="stuff")
 
+SIMILARITY_THRESHOLD = 0.7
+
+
 # Unified /rag endpoint: RAG (if enabled) + fallback to LLM
 @app.post("/rag")
 async def rag_smart_response(request: TextRequest):
@@ -60,7 +63,9 @@ async def rag_smart_response(request: TextRequest):
     use_rag = request.enable_rag
 
     if use_rag:
-        docs = vectorstore.similarity_search(query, k=5)
+
+        results = vectorstore.similarity_search_with_score(query, k=5)
+        docs = [doc for doc, score in results if score >= SIMILARITY_THRESHOLD]
         if docs:
             result = qa_chain.run(input_documents=docs, question=query)
             return JSONResponse(content={
