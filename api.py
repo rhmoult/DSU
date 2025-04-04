@@ -65,7 +65,7 @@ async def rag_smart_response(request: TextRequest):
         do_sample=True,
         top_k=50,
         top_p=0.9,
-        early_stopping=True
+        early_stopping=False
     )
     generated_text = tokenizer.decode(output[0], skip_special_tokens=True)
 
