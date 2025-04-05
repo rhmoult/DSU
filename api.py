@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, Header, HTTPException
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from transformers import AutoModelForCausalLM, AutoTokenizer, pipeline
@@ -15,7 +15,13 @@ app = FastAPI()
 # Request model
 class TextRequest(BaseModel):
     prompt: str
-    enable_rag: bool = False  # RAG is disabled by default
+    enable_rag: bool = False  # Ignored due to ABAC
+
+# ABAC Policy function
+def abac_policy(role: str, resource: str, action: str) -> bool:
+    if role == "admin" and resource == "/rag" and action == "post":
+        return True
+    return False
 
 # Load generation model
 model_name = "deepseek-ai/deepseek-r1-distill-qwen-1.5b"
@@ -55,22 +61,26 @@ with warnings.catch_warnings():
 
 SIMILARITY_THRESHOLD = 0.7
 
-
-# Unified /rag endpoint: RAG (if enabled) + fallback to LLM
+# /rag endpoint with ABAC-driven behavior
 @app.post("/rag")
-async def rag_smart_response(request: TextRequest):
+async def rag_smart_response(
+    request: TextRequest,
+    role: str = Header(default="unverified")
+):
     query = request.prompt
-    use_rag = request.enable_rag
 
-    if use_rag:
+    # Use ABAC policy to determine if RAG is enabled
+    enable_rag = abac_policy(role, "/rag", "post")
 
+    if enable_rag:
         results = vectorstore.similarity_search_with_score(query, k=5)
         docs = [doc for doc, score in results if score >= SIMILARITY_THRESHOLD]
         if docs:
             result = qa_chain.run(input_documents=docs, question=query)
             return JSONResponse(content={
                 "response": result,
-                "source": "retrieved_docs"
+                "source": "retrieved_docs",
+                "mode": role
             })
 
     # Fallback to LLM-only generation
@@ -80,6 +90,7 @@ async def rag_smart_response(request: TextRequest):
         truncation=True,
         max_length=512
     ).to("cuda")
+
     output = model.generate(
         **inputs,
         max_new_tokens=256,
@@ -90,12 +101,14 @@ async def rag_smart_response(request: TextRequest):
         do_sample=True,
         top_k=50,
         top_p=0.9,
-        early_stopping=False  # no effect with num_beams=1, suppresses warning
+        early_stopping=False  # Suppresses warning
     )
+
     generated_text = tokenizer.decode(output[0], skip_special_tokens=True)
 
     return JSONResponse(content={
         "response": generated_text,
-        "source": "llm_only" if not use_rag else "llm_fallback"
+        "source": "llm_only" if not enable_rag else "llm_fallback",
+        "mode": role
     })
 
