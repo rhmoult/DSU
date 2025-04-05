@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Request
+from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from transformers import AutoModelForCausalLM, AutoTokenizer, pipeline
@@ -9,6 +9,8 @@ from langchain_community.vectorstores import FAISS
 from langchain_huggingface import HuggingFaceEmbeddings, HuggingFacePipeline
 from langchain.chains.question_answering import load_qa_chain
 
+from nemoguardrails import LLMRails
+
 # FastAPI setup
 app = FastAPI()
 
@@ -16,6 +18,9 @@ app = FastAPI()
 class TextRequest(BaseModel):
     prompt: str
     enable_rag: bool = False  # RAG is disabled by default
+
+# Global guardrails instance
+rails = None
 
 # Load generation model
 model_name = "deepseek-ai/deepseek-r1-distill-qwen-1.5b"
@@ -55,31 +60,48 @@ with warnings.catch_warnings():
 
 SIMILARITY_THRESHOLD = 0.7
 
+# Load guardrails on startup
+@app.on_event("startup")
+async def startup_event():
+    global rails
+    rails = LLMRails.from_config("./guardrails")
+    await rails.app_config.load()
 
-# Unified /rag endpoint: RAG (if enabled) + fallback to LLM
+# /rag endpoint: RAG + Guardrails
 @app.post("/rag")
 async def rag_smart_response(request: TextRequest):
+    global rails
     query = request.prompt
     use_rag = request.enable_rag
 
-    if use_rag:
+    # Guardrails input filter
+    input_guard = await rails.guard_input(prompt=query)
+    if input_guard.is_blocked:
+        return JSONResponse(content={
+            "response": input_guard.response,
+            "source": "guardrails_input_block"
+        })
 
+    # Attempt RAG if enabled
+    if use_rag:
         results = vectorstore.similarity_search_with_score(query, k=5)
         docs = [doc for doc, score in results if score >= SIMILARITY_THRESHOLD]
         if docs:
             result = qa_chain.run(input_documents=docs, question=query)
+            output_guard = await rails.guard_output(prompt=query, response=result)
             return JSONResponse(content={
-                "response": result,
-                "source": "retrieved_docs"
+                "response": output_guard.response,
+                "source": "retrieved_docs_guarded"
             })
 
-    # Fallback to LLM-only generation
+    # Fallback to direct LLM generation
     inputs = tokenizer(
         query,
         return_tensors="pt",
         truncation=True,
         max_length=512
     ).to("cuda")
+
     output = model.generate(
         **inputs,
         max_new_tokens=256,
@@ -90,12 +112,15 @@ async def rag_smart_response(request: TextRequest):
         do_sample=True,
         top_k=50,
         top_p=0.9,
-        early_stopping=False  # no effect with num_beams=1, suppresses warning
+        early_stopping=False
     )
     generated_text = tokenizer.decode(output[0], skip_special_tokens=True)
 
+    # Guardrails output filter
+    output_guard = await rails.guard_output(prompt=query, response=generated_text)
+
     return JSONResponse(content={
-        "response": generated_text,
-        "source": "llm_only" if not use_rag else "llm_fallback"
+        "response": output_guard.response,
+        "source": "llm_only_guarded" if not use_rag else "llm_fallback_guarded"
     })
 
