@@ -4,10 +4,27 @@ from pydantic import BaseModel
 from transformers import AutoModelForCausalLM, AutoTokenizer, pipeline
 import torch
 import warnings
+import time
+import logging
+from datetime import datetime
+import os
 
 from langchain_community.vectorstores import FAISS
 from langchain_huggingface import HuggingFaceEmbeddings, HuggingFacePipeline
 from langchain.chains.question_answering import load_qa_chain
+
+# Create logs directory if it doesn't exist
+os.makedirs("logs", exist_ok=True)
+
+# Generate a new log file with current date and time
+log_filename = datetime.now().strftime("logs/latency_%Y%m%d_%H%M%S.log")
+
+# Set up logging to the new file
+logging.basicConfig(
+    filename=log_filename,
+    level=logging.INFO,
+    format="%(asctime)s - %(levelname)s - %(message)s"
+)
 
 # FastAPI setup
 app = FastAPI()
@@ -55,47 +72,54 @@ with warnings.catch_warnings():
 
 SIMILARITY_THRESHOLD = 0.7
 
-
 # Unified /rag endpoint: RAG (if enabled) + fallback to LLM
 @app.post("/rag")
 async def rag_smart_response(request: TextRequest):
+    start_time = time.time()
     query = request.prompt
     use_rag = request.enable_rag
+    source = "unknown"
 
-    if use_rag:
+    try:
+        if use_rag:
+            results = vectorstore.similarity_search_with_score(query, k=5)
+            docs = [doc for doc, score in results if score >= SIMILARITY_THRESHOLD]
+            if docs:
+                result = qa_chain.run(input_documents=docs, question=query)
+                source = "retrieved_docs"
+                return JSONResponse(content={
+                    "response": result,
+                    "source": source
+                })
 
-        results = vectorstore.similarity_search_with_score(query, k=5)
-        docs = [doc for doc, score in results if score >= SIMILARITY_THRESHOLD]
-        if docs:
-            result = qa_chain.run(input_documents=docs, question=query)
-            return JSONResponse(content={
-                "response": result,
-                "source": "retrieved_docs"
-            })
+        # Fallback to LLM-only generation
+        inputs = tokenizer(
+            query,
+            return_tensors="pt",
+            truncation=True,
+            max_length=512
+        ).to("cuda")
+        output = model.generate(
+            **inputs,
+            max_new_tokens=256,
+            pad_token_id=tokenizer.eos_token_id,
+            temperature=0.9,
+            max_time=15.0,
+            num_beams=1,
+            do_sample=True,
+            top_k=50,
+            top_p=0.9,
+            early_stopping=False  # no effect with num_beams=1, suppresses warning
+        )
+        generated_text = tokenizer.decode(output[0], skip_special_tokens=True)
+        source = "llm_only" if not use_rag else "llm_fallback"
+        return JSONResponse(content={
+            "response": generated_text,
+            "source": source
+        })
 
-    # Fallback to LLM-only generation
-    inputs = tokenizer(
-        query,
-        return_tensors="pt",
-        truncation=True,
-        max_length=512
-    ).to("cuda")
-    output = model.generate(
-        **inputs,
-        max_new_tokens=256,
-        pad_token_id=tokenizer.eos_token_id,
-        temperature=0.9,
-        max_time=15.0,
-        num_beams=1,
-        do_sample=True,
-        top_k=50,
-        top_p=0.9,
-        early_stopping=False  # no effect with num_beams=1, suppresses warning
-    )
-    generated_text = tokenizer.decode(output[0], skip_special_tokens=True)
-
-    return JSONResponse(content={
-        "response": generated_text,
-        "source": "llm_only" if not use_rag else "llm_fallback"
-    })
+    finally:
+        end_time = time.time()
+        latency = round(end_time - start_time, 4)
+        logging.info(f"Source: {source} | Latency: {latency} sec | Prompt: {query[:50]}...")
 
