@@ -1,32 +1,17 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from transformers import AutoModelForCausalLM, AutoTokenizer, pipeline
 import torch
 import warnings
-import time
-import logging
-from datetime import datetime
-import os
 
 from langchain_community.vectorstores import FAISS
 from langchain_huggingface import HuggingFaceEmbeddings, HuggingFacePipeline
 from langchain.chains.question_answering import load_qa_chain
 
-from nemoguardrails import LLMRails
-
-# Create logs directory if it doesn't exist
-os.makedirs("logs", exist_ok=True)
-
-# Generate a new log file with current date and time
-log_filename = datetime.now().strftime("logs/latency_%Y%m%d_%H%M%S.log")
-
-# Set up logging to the new file
-logging.basicConfig(
-    filename=log_filename,
-    level=logging.INFO,
-    format="%(asctime)s - %(levelname)s - %(message)s"
-)
+# Presidio
+from presidio_analyzer import AnalyzerEngine
+from presidio_anonymizer import AnonymizerEngine
 
 # FastAPI setup
 app = FastAPI()
@@ -34,10 +19,11 @@ app = FastAPI()
 # Request model
 class TextRequest(BaseModel):
     prompt: str
-    enable_rag: bool = False  # RAG is disabled by default
+    enable_rag: bool = True  # RAG is enabled by default
 
-# Global guardrails instance
-rails = None
+# Presidio engines
+analyzer = AnalyzerEngine()
+anonymizer = AnonymizerEngine()
 
 # Load generation model
 model_name = "deepseek-ai/deepseek-r1-distill-qwen-1.5b"
@@ -77,78 +63,59 @@ with warnings.catch_warnings():
 
 SIMILARITY_THRESHOLD = 0.7
 
-# Load guardrails on startup
-@app.on_event("startup")
-async def startup_event():
-    global rails
-    rails = LLMRails.from_config("./guardrails")
-    await rails.app_config.load()
-
-# /rag endpoint: RAG + Guardrails
 @app.post("/rag")
 async def rag_smart_response(request: TextRequest):
-    global rails
     query = request.prompt
     use_rag = request.enable_rag
-    source = "unknown"
-    start_time = time.time()
 
-    try:
-        # Guardrails input filter
-        input_guard = await rails.guard_input(prompt=query)
-        if input_guard.is_blocked:
-            source = "guardrails_input_block"
+    if use_rag:
+        results = vectorstore.similarity_search_with_score(query, k=5)
+        docs = [doc for doc, score in results if score >= SIMILARITY_THRESHOLD]
+
+        # Redact PII (including SSNs) from document content
+        redacted_docs = []
+        for doc in docs:
+            text = doc.page_content
+            findings = analyzer.analyze(text=text, language="en")
+            if findings:
+                text = anonymizer.anonymize(text=text, analyzer_results=findings).text
+            doc.page_content = text  # Replace content with redacted version
+            redacted_docs.append(doc)
+
+        if redacted_docs:
+            result = qa_chain.run(input_documents=redacted_docs, question=query)
             return JSONResponse(content={
-                "response": input_guard.response,
-                "source": source
+                "response": result,
+                "source": "retrieved_docs",
+                "pii_redacted": True
             })
 
-        # Attempt RAG if enabled
-        if use_rag:
-            results = vectorstore.similarity_search_with_score(query, k=5)
-            docs = [doc for doc, score in results if score >= SIMILARITY_THRESHOLD]
-            if docs:
-                result = qa_chain.run(input_documents=docs, question=query)
-                output_guard = await rails.guard_output(prompt=query, response=result)
-                source = "retrieved_docs_guarded"
-                return JSONResponse(content={
-                    "response": output_guard.response,
-                    "source": source
-                })
+    # Fallback to LLM-only generation
+    inputs = tokenizer(
+        query,
+        return_tensors="pt",
+        truncation=True,
+        max_length=512
+    ).to("cuda")
 
-        # Fallback to direct LLM generation
-        inputs = tokenizer(
-            query,
-            return_tensors="pt",
-            truncation=True,
-            max_length=512
-        ).to("cuda")
+    output = model.generate(
+        **inputs,
+        max_new_tokens=256,
+        pad_token_id=tokenizer.eos_token_id,
+        temperature=0.9,
+        max_time=15.0,
+        num_beams=1,
+        do_sample=True,
+        top_k=50,
+        top_p=0.9,
+        early_stopping=False
+    )
 
-        output = model.generate(
-            **inputs,
-            max_new_tokens=256,
-            pad_token_id=tokenizer.eos_token_id,
-            temperature=0.9,
-            max_time=15.0,
-            num_beams=1,
-            do_sample=True,
-            top_k=50,
-            top_p=0.9,
-            early_stopping=False
-        )
-        generated_text = tokenizer.decode(output[0], skip_special_tokens=True)
+    generated_text = tokenizer.decode(output[0], skip_special_tokens=True)
 
-        # Guardrails output filter
-        output_guard = await rails.guard_output(prompt=query, response=generated_text)
-        source = "llm_only_guarded" if not use_rag else "llm_fallback_guarded"
-
-        return JSONResponse(content={
-            "response": output_guard.response,
-            "source": source
-        })
-
-    finally:
-        end_time = time.time()
-        latency = round(end_time - start_time, 4)
-        logging.info(f"Source: {source} | Latency: {latency} sec | Prompt: {query[:50]}...")
+    return JSONResponse(content={
+        "response": generated_text,
+        "source": "llm_only" if not use_rag else "llm_fallback",
+        "pii_redacted": False
+    })
 
