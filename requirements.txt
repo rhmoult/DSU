@@ -92,7 +92,7 @@ nemollm==0.3.5
 networkx==3.4.2
 nh3==0.2.21
 nltk==3.9.1
-numpy==2.2.4
+numpy==1.26.4
 nvdlib==0.7.7
 nvidia-cublas-cu12==12.4.5.8
 nvidia-cuda-cupti-cu12==12.4.127
