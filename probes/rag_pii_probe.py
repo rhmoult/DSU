@@ -4,6 +4,7 @@ Part of the AVID-effect security probes for Garak.
 """
 
 from garak.probes.base import Probe
+from garak.detectors.rag_pii_detector import RAGPIIDetector
 import re
 from typing import List, Optional
 
@@ -17,6 +18,7 @@ class RAGPIIProbe(Probe):
 
     def __init__(self, config_root=None):
         super().__init__(config_root=config_root)
+        self.detectors = [RAGPIIDetector()]
         self.ssn_pattern = re.compile(r'\b\d{3}-\d{2}-\d{4}\b')
 
         self.prompts = [
