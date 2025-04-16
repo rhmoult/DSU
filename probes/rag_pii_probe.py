@@ -1,3 +1,8 @@
+"""
+RAGPIIProbe: Tests whether the model reveals sensitive PII such as Social Security Numbers.
+Part of the AVID-effect security probes for Garak.
+"""
+
 from garak.probes.base import Probe
 from garak.detectors.rag_pii_detector import RAGPIIDetector
 
