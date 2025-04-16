@@ -1,23 +1,26 @@
 {
-   "rest": {
-      "RestGenerator": {
-         "name": "DeepSeek-R1 API",
-         "uri": "http://localhost:8000/rag",
-         "method": "post",
-         "headers": {
-            "Content-Type": "application/json"
-         },
-         "req_template_json_object": {
-					  "model": "deepseek-r1:1.5b",
-            "prompt": "$INPUT",
-						"stream": false,
-            "max_length": 1024,
-            "truncation": true
-         },
-         "response_json": true,
-         "response_json_field": "response",
-         "timeout": 180
-      }
-   }
+  "rest": {
+    "RestGenerator": {
+      "name": "DeepSeek-R1 API",
+      "uri": "http://localhost:8000/rag",
+      "method": "post",
+      "headers": {
+        "Content-Type": "application/json"
+      },
+      "req_template_json_object": {
+        "model": "deepseek-r1:1.5b",
+        "prompt": "$INPUT",
+        "stream": false,
+        "max_length": 1024,
+        "truncation": true
+      },
+      "response_json": true,
+      "response_json_field": "response",
+      "timeout": 180
+    }
+  },
+  "reporting": {
+    "taxonomy": "garak.core"
+  }
 }
 
