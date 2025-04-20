@@ -14,13 +14,9 @@ from nemoguardrails import LLMRails
 from pydantic import BaseModel
 from transformers import AutoModelForCausalLM, AutoTokenizer, pipeline
 
-# Create logs directory if it doesn't exist
+# Set up logging
 os.makedirs("logs", exist_ok=True)
-
-# Generate a new log file with current date and time
 log_filename = datetime.now().strftime("logs/latency_%Y%m%d_%H%M%S.log")
-
-# Set up logging to the new file
 logging.basicConfig(
     filename=log_filename,
     level=logging.INFO,
@@ -84,11 +80,11 @@ async def startup_event():
 # /rag endpoint: RAG + Guardrails
 @app.post("/rag")
 async def rag_smart_response(request: TextRequest):
+    start_time = time.time()
     global rails
     query = request.prompt
     use_rag = request.enable_rag
     source = "unknown"
-    start_time = time.time()
 
     try:
         # Guardrails input filter
@@ -111,7 +107,7 @@ async def rag_smart_response(request: TextRequest):
                     content={"response": output_guard.response, "source": source}
                 )
 
-        # Fallback to direct LLM generation
+        # Fallback to LLM-only generation
         inputs = tokenizer(
             query, return_tensors="pt", truncation=True, max_length=512
         ).to("cuda")
@@ -126,7 +122,7 @@ async def rag_smart_response(request: TextRequest):
             do_sample=True,
             top_k=50,
             top_p=0.9,
-            early_stopping=False,
+            early_stopping=False,  # no effect with num_beams=1, suppresses warning
         )
         generated_text = tokenizer.decode(output[0], skip_special_tokens=True)
 

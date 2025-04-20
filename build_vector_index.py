@@ -23,10 +23,7 @@ embedding_model = HuggingFaceEmbeddings(
 )
 
 # Create FAISS index
-vectorstore = FAISS.load_local(
-    "faiss_pii_index", embeddings=embedding_model, allow_dangerous_deserialization=True
-)
-
+vectorstore = FAISS.from_documents(documents, embedding_model)
 
 # Save the index
 vectorstore.save_local("faiss_pii_index")
