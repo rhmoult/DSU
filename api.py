@@ -13,9 +13,6 @@ from langchain_huggingface import HuggingFaceEmbeddings, HuggingFacePipeline
 from pydantic import BaseModel
 from transformers import AutoModelForCausalLM, AutoTokenizer, pipeline
 
-# FastAPI setup
-app = FastAPI()
-
 # Set up logging
 os.makedirs("logs", exist_ok=True)
 log_filename = datetime.now().strftime("logs/latency_%Y%m%d_%H%M%S.log")
@@ -24,6 +21,9 @@ logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(levelname)s - %(message)s",
 )
+
+# FastAPI setup
+app = FastAPI()
 
 
 # Request model
@@ -46,16 +46,17 @@ model = AutoModelForCausalLM.from_pretrained(
     model_name, torch_dtype=torch.float16, device_map="auto", low_cpu_mem_usage=True
 )
 
+# Prevent "Sliding Window Attention is enabled" warning
 if hasattr(model.config, "use_sliding_window"):
     model.config.use_sliding_window = False
 
-# Build pipeline
+# Build pipeline for HuggingFace
 qa_pipeline = pipeline(
     "text-generation", model=model, tokenizer=tokenizer, max_new_tokens=256
 )
 llm = HuggingFacePipeline(pipeline=qa_pipeline)
 
-# Load FAISS vectorstore
+# Load FAISS vector store and embeddings
 embedding_model = HuggingFaceEmbeddings(
     model_name="sentence-transformers/all-MiniLM-L6-v2"
 )
@@ -63,7 +64,7 @@ vectorstore = FAISS.load_local(
     "faiss_pii_index", embeddings=embedding_model, allow_dangerous_deserialization=True
 )
 
-# Load QA chain
+# Load LangChain QA chain with deprecation warning suppressed
 with warnings.catch_warnings():
     warnings.simplefilter("ignore")
     qa_chain = load_qa_chain(llm, chain_type="stuff")
@@ -93,7 +94,7 @@ async def rag_smart_response(
                     content={"response": result, "source": source, "mode": role}
                 )
 
-        # Fallback to LLM
+        # Fallback to LLM-only generation
         inputs = tokenizer(
             query, return_tensors="pt", truncation=True, max_length=512
         ).to("cuda")
@@ -108,7 +109,7 @@ async def rag_smart_response(
             do_sample=True,
             top_k=50,
             top_p=0.9,
-            early_stopping=False,
+            early_stopping=False,  # no effect with num_beams=1, suppresses warning
         )
 
         generated_text = tokenizer.decode(output[0], skip_special_tokens=True)
@@ -118,7 +119,8 @@ async def rag_smart_response(
         )
 
     finally:
-        latency = round(time.time() - start_time, 4)
+        end_time = time.time()
+        latency = round(end_time - start_time, 4)
         logging.info(
             f"Role: {role} | Source: {source} | Latency: {latency}s | Prompt: {query[:50]}..."
         )
