@@ -39,4 +39,3 @@ class RAGPIIDetector(Detector):
             else:
                 results.append(0.0)
         return results
-
