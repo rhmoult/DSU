@@ -1,7 +1,7 @@
+import pandas as pd
+from langchain.schema import Document
 from langchain_community.vectorstores import FAISS
 from langchain_huggingface import HuggingFaceEmbeddings
-from langchain.schema import Document
-import pandas as pd
 
 # Load your CSV
 df = pd.read_csv("synthetic_pii_data.csv")
