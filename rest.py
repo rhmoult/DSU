@@ -14,7 +14,8 @@ import backoff
 import jsonpath_ng
 import requests
 from garak import _config
-from garak.exception import APIKeyMissingError, BadGeneratorException, RateLimitHit
+from garak.exception import (APIKeyMissingError, BadGeneratorException,
+                             RateLimitHit)
 from garak.generators.base import Generator
 from jsonpath_ng.exceptions import JsonPathParserError
 
