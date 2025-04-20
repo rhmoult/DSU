@@ -14,8 +14,7 @@ import backoff
 import jsonpath_ng
 import requests
 from garak import _config
-from garak.exception import (APIKeyMissingError, BadGeneratorException,
-                             RateLimitHit)
+from garak.exception import APIKeyMissingError, BadGeneratorException, RateLimitHit
 from garak.generators.base import Generator
 from jsonpath_ng.exceptions import JsonPathParserError
 
@@ -263,15 +262,15 @@ class RestGenerator(Generator):
         response = [None]
 
         # if response_json_field starts with a $, treat is as a JSONPath
-        assert (
-            self.response_json
-        ), "response_json must be True at this point; if False, we should have returned already"
-        assert isinstance(
-            self.response_json_field, str
-        ), "response_json_field must be a string"
-        assert (
-            len(self.response_json_field) > 0
-        ), "response_json_field needs to be complete if response_json is true; ValueError should have been raised in constructor"
+        assert self.response_json, (
+            "response_json must be True at this point; if False, we should have returned already"
+        )
+        assert isinstance(self.response_json_field, str), (
+            "response_json_field must be a string"
+        )
+        assert len(self.response_json_field) > 0, (
+            "response_json_field needs to be complete if response_json is true; ValueError should have been raised in constructor"
+        )
         if self.response_json_field[0] != "$":
             if isinstance(response_object, list):
                 response = [item[self.response_json_field] for item in response_object]
