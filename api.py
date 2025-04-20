@@ -1,21 +1,20 @@
-from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse
-from pydantic import BaseModel
-from transformers import AutoModelForCausalLM, AutoTokenizer, pipeline
-import torch
-import warnings
+import logging
 import os
 import time
-import logging
+import warnings
 from datetime import datetime
 
+import torch
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
+from langchain.chains.question_answering import load_qa_chain
 from langchain_community.vectorstores import FAISS
 from langchain_huggingface import HuggingFaceEmbeddings, HuggingFacePipeline
-from langchain.chains.question_answering import load_qa_chain
-
 # Presidio
 from presidio_analyzer import AnalyzerEngine
 from presidio_anonymizer import AnonymizerEngine
+from pydantic import BaseModel
+from transformers import AutoModelForCausalLM, AutoTokenizer, pipeline
 
 # Create logs directory if it doesn't exist
 os.makedirs("logs", exist_ok=True)
