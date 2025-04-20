@@ -9,15 +9,15 @@ Generic Module for REST API connections
 import json
 import logging
 from typing import List, Union
-import requests
 
 import backoff
 import jsonpath_ng
-from jsonpath_ng.exceptions import JsonPathParserError
-
+import requests
 from garak import _config
-from garak.exception import APIKeyMissingError, BadGeneratorException, RateLimitHit
+from garak.exception import (APIKeyMissingError, BadGeneratorException,
+                             RateLimitHit)
 from garak.generators.base import Generator
+from jsonpath_ng.exceptions import JsonPathParserError
 
 
 class RestGenerator(Generator):

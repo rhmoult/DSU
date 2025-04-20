@@ -1,17 +1,17 @@
+import logging
+import os
+import time
+import warnings
+from datetime import datetime
+
+import torch
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel
-from transformers import AutoModelForCausalLM, AutoTokenizer, pipeline
-import torch
-import warnings
-import time
-import logging
-from datetime import datetime
-import os
-
+from langchain.chains.question_answering import load_qa_chain
 from langchain_community.vectorstores import FAISS
 from langchain_huggingface import HuggingFaceEmbeddings, HuggingFacePipeline
-from langchain.chains.question_answering import load_qa_chain
+from pydantic import BaseModel
+from transformers import AutoModelForCausalLM, AutoTokenizer, pipeline
 
 # Set up logging
 os.makedirs("logs", exist_ok=True)
