@@ -11,3 +11,4 @@ garak -m rest -p promptinject -G ./garak_config.json --verbose
 for file in $(ls -ltr ~/.local/share/garak/garak_runs/ | tail -2 | awk -F ' ' '{print }'); do cp $(find ~ -type f -name $file) logs/promptinject_$file 2>/dev/null; done
 garak -m rest -p divergence -G ./garak_config.json --verbose
 for file in $(ls -ltr ~/.local/share/garak/garak_runs/ | tail -2 | awk -F ' ' '{print }'); do cp $(find ~ -type f -name $file) logs/divergence_$file 2>/dev/null; done
+kill -9 $(ps -ef | grep uvicorn | grep -v grep | awk -F ' ' '{print $2}')
