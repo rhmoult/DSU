@@ -29,7 +29,7 @@ app = FastAPI()
 # Request model
 class TextRequest(BaseModel):
     prompt: str
-    enable_rag: bool = True  # RAG is disabled by default
+    enable_rag: bool = True  # RAG is enabled by default
 
 
 # Load generation model
