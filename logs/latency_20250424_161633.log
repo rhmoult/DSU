@@ -1,0 +1,9 @@
+2025-04-24 16:16:35,379 - INFO - We will use 90% of the memory on device 0 for storing the model, and 10% for the buffer to avoid OOM. You can set `max_memory` in to a higher value to use more memory (at your own risk).
+2025-04-24 16:16:37,686 - INFO - PyTorch version 2.6.0 available.
+2025-04-24 16:16:37,784 - INFO - Use pytorch device_name: cuda
+2025-04-24 16:16:37,784 - INFO - Load pretrained SentenceTransformer: sentence-transformers/all-MiniLM-L6-v2
+2025-04-24 16:16:38,629 - INFO - Loading faiss with AVX2 support.
+2025-04-24 16:16:38,630 - INFO - Could not load library with AVX2 support due to:
+ModuleNotFoundError("No module named 'faiss.swigfaiss_avx2'")
+2025-04-24 16:16:38,630 - INFO - Loading faiss.
+2025-04-24 16:16:38,788 - INFO - Successfully loaded faiss.
