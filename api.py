@@ -10,7 +10,7 @@ from fastapi.responses import JSONResponse
 from langchain.chains.question_answering import load_qa_chain
 from langchain_community.vectorstores import FAISS
 from langchain_huggingface import HuggingFaceEmbeddings, HuggingFacePipeline
-from nemoguardrails import LLMRails
+from nemoguardrails import LLMRails, RailsConfig
 from pydantic import BaseModel
 from transformers import AutoModelForCausalLM, AutoTokenizer, pipeline
 
@@ -26,14 +26,12 @@ logging.basicConfig(
 # FastAPI setup
 app = FastAPI()
 
-
 # Request model
 class TextRequest(BaseModel):
     prompt: str
-    enable_rag: bool = False  # RAG is disabled by default
+    enable_rag: bool = False  # Optional flag, not used now
 
-
-# Global guardrails instance
+# Global variables
 rails = None
 
 # Load generation model
@@ -61,77 +59,110 @@ vectorstore = FAISS.load_local(
     "faiss_pii_index", embeddings=embedding_model, allow_dangerous_deserialization=True
 )
 
-# Load LangChain QA chain with deprecation warning suppressed
+# Load LangChain QA chain
 with warnings.catch_warnings():
     warnings.simplefilter("ignore")
     qa_chain = load_qa_chain(llm, chain_type="stuff")
 
 SIMILARITY_THRESHOLD = 0.7
 
-
-# Load guardrails on startup
+# --- Guardrails Startup ---
 @app.on_event("startup")
 async def startup_event():
     global rails
-    rails = LLMRails.from_config("./guardrails")
-    await rails.app_config.load()
 
+    # --- Inline Guardrails config ---
+    yaml_content = """
+instructions:
+  - type: general
+    content: |
+      You are a helpful assistant. Answer the user's questions thoughtfully.
 
-# /rag endpoint: RAG + Guardrails
+models:
+  - type: langchain
+    engine: huggingface_pipeline
+    model: HuggingFacePipeline
+"""
+
+    colang_content = """
+define user express greeting
+    "hello"
+    "hi"
+    "what's up?"
+
+define user ask question
+    "Can you help me with *?"
+    "I have a question about *"
+    "Tell me about *"
+    "Explain *"
+    "What is *"
+
+define flow greet_user
+    user express greeting
+    assistant express greeting
+
+define flow answer_question
+    user ask question
+    assistant call action run_rag
+"""
+
+    # Load guardrails config
+    config = RailsConfig.from_content(
+        yaml_content=yaml_content,
+        colang_content=colang_content
+    )
+
+    rails = LLMRails(config)
+
+    # Register RAG as a Guardrails action
+    @rails.action()
+    async def run_rag(query: str) -> str:
+        """Custom RAG retrieval and fallback generation."""
+        results = vectorstore.similarity_search_with_score(query, k=5)
+        docs = [doc for doc, score in results if score >= SIMILARITY_THRESHOLD]
+
+        if docs:
+            return qa_chain.run(input_documents=docs, question=query)
+        else:
+            # Fallback to LLM-only generation with fallback message
+            fallback_message = (
+                "I couldn't find relevant documents to directly answer your question. "
+                "However, based on my general knowledge:\n\n"
+            )
+
+            inputs = tokenizer(
+                query, return_tensors="pt", truncation=True, max_length=512
+            ).to("cuda")
+
+            output = model.generate(
+                **inputs,
+                max_new_tokens=256,
+                pad_token_id=tokenizer.eos_token_id,
+                temperature=0.9,
+                max_time=15.0,
+                num_beams=1,
+                do_sample=True,
+                top_k=50,
+                top_p=0.9,
+                early_stopping=False,
+            )
+            generated_text = tokenizer.decode(output[0], skip_special_tokens=True)
+
+            return fallback_message + generated_text
+
+# --- FastAPI Endpoint ---
 @app.post("/rag")
 async def rag_smart_response(request: TextRequest):
     start_time = time.time()
-    global rails
     query = request.prompt
-    use_rag = request.enable_rag
-    source = "unknown"
+    source = "guardrails"
 
     try:
-        # Guardrails input filter
-        input_guard = await rails.guard_input(prompt=query)
-        if input_guard.is_blocked:
-            source = "guardrails_input_block"
-            return JSONResponse(
-                content={"response": input_guard.response, "source": source}
-            )
-
-        # Attempt RAG if enabled
-        if use_rag:
-            results = vectorstore.similarity_search_with_score(query, k=5)
-            docs = [doc for doc, score in results if score >= SIMILARITY_THRESHOLD]
-            if docs:
-                result = qa_chain.run(input_documents=docs, question=query)
-                output_guard = await rails.guard_output(prompt=query, response=result)
-                source = "retrieved_docs_guarded"
-                return JSONResponse(
-                    content={"response": output_guard.response, "source": source}
-                )
-
-        # Fallback to LLM-only generation
-        inputs = tokenizer(
-            query, return_tensors="pt", truncation=True, max_length=512
-        ).to("cuda")
-
-        output = model.generate(
-            **inputs,
-            max_new_tokens=256,
-            pad_token_id=tokenizer.eos_token_id,
-            temperature=0.9,
-            max_time=15.0,
-            num_beams=1,
-            do_sample=True,
-            top_k=50,
-            top_p=0.9,
-            early_stopping=False,  # no effect with num_beams=1, suppresses warning
-        )
-        generated_text = tokenizer.decode(output[0], skip_special_tokens=True)
-
-        # Guardrails output filter
-        output_guard = await rails.guard_output(prompt=query, response=generated_text)
-        source = "llm_only_guarded" if not use_rag else "llm_fallback_guarded"
+        # Use Guardrails to generate a response
+        guardrails_response = await rails.generate(prompt=query)
 
         return JSONResponse(
-            content={"response": output_guard.response, "source": source}
+            content={"response": guardrails_response, "source": source}
         )
 
     finally:
@@ -140,3 +171,4 @@ async def rag_smart_response(request: TextRequest):
         logging.info(
             f"Source: {source} | Latency: {latency} sec | Prompt: {query[:50]}..."
         )
+
