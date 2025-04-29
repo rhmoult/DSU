@@ -1,174 +1,122 @@
-import logging
-import os
-import time
-import warnings
-from datetime import datetime
-
-import torch
-from fastapi import FastAPI
-from fastapi.responses import JSONResponse
+import pdb
+from langchain.schema.runnable import RunnableLambda
 from langchain.chains.question_answering import load_qa_chain
-from langchain_community.vectorstores import FAISS
 from langchain_huggingface import HuggingFaceEmbeddings, HuggingFacePipeline
-from nemoguardrails import LLMRails, RailsConfig
-from pydantic import BaseModel
+from langchain_community.vectorstores import FAISS
 from transformers import AutoModelForCausalLM, AutoTokenizer, pipeline
+from fastapi import FastAPI
+from pydantic import BaseModel
+import torch
+from nemoguardrails import RailsConfig
+from nemoguardrails.integrations.langchain.runnable_rails import RunnableRails
 
-# Set up logging
-os.makedirs("logs", exist_ok=True)
-log_filename = datetime.now().strftime("logs/latency_%Y%m%d_%H%M%S.log")
-logging.basicConfig(
-    filename=log_filename,
-    level=logging.INFO,
-    format="%(asctime)s - %(levelname)s - %(message)s",
+# Load DeepSeek model
+tokenizer = AutoTokenizer.from_pretrained("deepseek-ai/deepseek-r1-distill-qwen-1.5b")
+model = AutoModelForCausalLM.from_pretrained(
+    "deepseek-ai/deepseek-r1-distill-qwen-1.5b", torch_dtype=torch.float16, device_map="auto"
 )
+
+# LangChain-compatible LLM
+qa_pipeline = pipeline("text-generation", model=model, tokenizer=tokenizer, max_new_tokens=256)
+llm = HuggingFacePipeline(pipeline=qa_pipeline)
+
+# Embedding and vector store
+embedding_model = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
+vectorstore = FAISS.load_local("faiss_pii_index", embeddings=embedding_model, allow_dangerous_deserialization=True)
+
+# QA chain for retrieved documents
+qa_chain = load_qa_chain(llm, chain_type="stuff")
+SIMILARITY_THRESHOLD = 0.7
+
+# RAG retrieval logic
+def retrieve_docs(query):
+    results = vectorstore.similarity_search_with_score(query, k=5)
+    return [doc for doc, score in results if score >= SIMILARITY_THRESHOLD]
+
+# RAG-based generation logic
+def rag_or_fallback(query):
+    docs = retrieve_docs(query)
+
+    if docs:
+        return qa_chain.invoke({"input_documents": docs, "question": query})
+    else:
+        inputs = tokenizer(query, return_tensors="pt", truncation=True, max_length=512).to("cuda")
+        output = model.generate(
+            **inputs,
+            max_new_tokens=256,
+            pad_token_id=tokenizer.eos_token_id,
+            temperature=0.9,
+            max_time=15.0,
+            num_beams=1,
+            do_sample=True,
+            top_k=50,
+            top_p=0.9,
+            early_stopping=False,
+        )
+        return tokenizer.decode(output[0], skip_special_tokens=True)
+
+# Create LangChain Runnable
+rag_chain = RunnableLambda(rag_or_fallback)
 
 # FastAPI setup
 app = FastAPI()
 
-# Request model
-class TextRequest(BaseModel):
-    prompt: str
-    enable_rag: bool = False  # Optional flag, not used now
+class QueryRequest(BaseModel):
+    query: str
 
-# Global variables
-rails = None
-
-# Load generation model
-model_name = "deepseek-ai/deepseek-r1-distill-qwen-1.5b"
-tokenizer = AutoTokenizer.from_pretrained(model_name)
-model = AutoModelForCausalLM.from_pretrained(
-    model_name, torch_dtype=torch.float16, device_map="auto", low_cpu_mem_usage=True
-)
-
-# Prevent "Sliding Window Attention is enabled" warning
-if hasattr(model.config, "use_sliding_window"):
-    model.config.use_sliding_window = False
-
-# Build pipeline for HuggingFace
-qa_pipeline = pipeline(
-    "text-generation", model=model, tokenizer=tokenizer, max_new_tokens=256
-)
-llm = HuggingFacePipeline(pipeline=qa_pipeline)
-
-# Load FAISS vector store and embeddings
-embedding_model = HuggingFaceEmbeddings(
-    model_name="sentence-transformers/all-MiniLM-L6-v2"
-)
-vectorstore = FAISS.load_local(
-    "faiss_pii_index", embeddings=embedding_model, allow_dangerous_deserialization=True
-)
-
-# Load LangChain QA chain
-with warnings.catch_warnings():
-    warnings.simplefilter("ignore")
-    qa_chain = load_qa_chain(llm, chain_type="stuff")
-
-SIMILARITY_THRESHOLD = 0.7
-
-# --- Guardrails Startup ---
-@app.on_event("startup")
-async def startup_event():
-    global rails
-
-    # --- Inline Guardrails config ---
-    yaml_content = """
+# Minimal Guardrails YAML configuration
+yaml_content = """
 instructions:
   - type: general
     content: |
-      You are a helpful assistant. Answer the user's questions thoughtfully.
+      You are a helpful bot. Answer the user's questions thoughtfully.
+      - If you don't know the answer, say: "I'm not sure about that."
+      - Never make up information (hallucinate).
+      - Never include your personal opinions (like "I think" or "I believe").
+      - Always be concise and avoid rambling.
 
-models:
-  - type: langchain
-    engine: huggingface_pipeline
-    model: HuggingFacePipeline
+settings:
+  passthrough: false
+
+output_checks:
+  - name: no_hallucination
+    type: regex
+    pattern: ".*I'm not sure.*"
+    on_fail: "If unsure, clearly say 'I'm not sure about that.' Do not fabricate answers."
+
+  - name: no_personal_opinion
+    type: contains
+    keywords: ["I think", "I believe", "In my opinion"]
+    on_fail: "Do not include personal opinions. Stick to factual information."
+
+  - name: no_ssn_rambling
+    type: contains
+    keywords: ["social security number", "SSN", "social security numbers"]
+    on_fail: "Avoid discussing social security numbers unless absolutely necessary, and be concise."
+
+  - name: no_ssn_format
+    type: regex
+    pattern: '\d{3}-\d{2}-\d{4}'
+    on_fail: "Detected a pattern resembling a Social Security Number. Do not output SSNs."
+
+  - name: limit_response_length
+    type: length
+    max_length: 500
+    on_fail: "Keep responses concise and under 500 characters unless truly necessary."
 """
 
-    colang_content = """
-define user express greeting
-    "hello"
-    "hi"
-    "what's up?"
+# Initialize RunnableRails and build the full chain
+@app.on_event("startup")
+async def startup_event():
+    global chain
 
-define user ask question
-    "Can you help me with *?"
-    "I have a question about *"
-    "Tell me about *"
-    "Explain *"
-    "What is *"
+    config = RailsConfig.from_content(yaml_content=yaml_content)
+    guardrails = RunnableRails(config=config, runnable=rag_chain)
 
-define flow greet_user
-    user express greeting
-    assistant express greeting
+    chain = guardrails | llm
 
-define flow answer_question
-    user ask question
-    assistant call action run_rag
-"""
-
-    # Load guardrails config
-    config = RailsConfig.from_content(
-        yaml_content=yaml_content,
-        colang_content=colang_content
-    )
-
-    rails = LLMRails(config)
-
-    # Register RAG as a Guardrails action
-    @rails.action()
-    async def run_rag(query: str) -> str:
-        """Custom RAG retrieval and fallback generation."""
-        results = vectorstore.similarity_search_with_score(query, k=5)
-        docs = [doc for doc, score in results if score >= SIMILARITY_THRESHOLD]
-
-        if docs:
-            return qa_chain.run(input_documents=docs, question=query)
-        else:
-            # Fallback to LLM-only generation with fallback message
-            fallback_message = (
-                "I couldn't find relevant documents to directly answer your question. "
-                "However, based on my general knowledge:\n\n"
-            )
-
-            inputs = tokenizer(
-                query, return_tensors="pt", truncation=True, max_length=512
-            ).to("cuda")
-
-            output = model.generate(
-                **inputs,
-                max_new_tokens=256,
-                pad_token_id=tokenizer.eos_token_id,
-                temperature=0.9,
-                max_time=15.0,
-                num_beams=1,
-                do_sample=True,
-                top_k=50,
-                top_p=0.9,
-                early_stopping=False,
-            )
-            generated_text = tokenizer.decode(output[0], skip_special_tokens=True)
-
-            return fallback_message + generated_text
-
-# --- FastAPI Endpoint ---
 @app.post("/rag")
-async def rag_smart_response(request: TextRequest):
-    start_time = time.time()
-    query = request.prompt
-    source = "guardrails"
-
-    try:
-        # Use Guardrails to generate a response
-        guardrails_response = await rails.generate(prompt=query)
-
-        return JSONResponse(
-            content={"response": guardrails_response, "source": source}
-        )
-
-    finally:
-        end_time = time.time()
-        latency = round(end_time - start_time, 4)
-        logging.info(
-            f"Source: {source} | Latency: {latency} sec | Prompt: {query[:50]}..."
-        )
-
+async def rag_endpoint(request: QueryRequest):
+    response = await chain.ainvoke(request.query)
+    pdb.set_trace()
+    return {"response": response["output_text"]}
