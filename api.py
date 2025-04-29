@@ -3,9 +3,11 @@ from langchain.chains.question_answering import load_qa_chain
 from langchain_huggingface import HuggingFaceEmbeddings, HuggingFacePipeline
 from langchain_community.vectorstores import FAISS
 from transformers import AutoModelForCausalLM, AutoTokenizer, pipeline
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 import torch
+import re
 from nemoguardrails import RailsConfig
 from nemoguardrails.integrations.langchain.runnable_rails import RunnableRails
 
@@ -28,9 +30,27 @@ qa_chain = load_qa_chain(llm, chain_type="stuff")
 SIMILARITY_THRESHOLD = 0.7
 
 # RAG retrieval logic
+def redact_sensitive_info(text):
+    return re.sub(r'\d{3}-\d{2}-\d{4}', '[REDACTED-SSN]', text)
+
+def is_query_about_ssns(query):
+    query = query.lower()
+    ssn_keywords = ["ssn", "social security number", "social security numbers"]
+    return any(keyword in query for keyword in ssn_keywords)
+
 def retrieve_docs(query):
     results = vectorstore.similarity_search_with_score(query, k=5)
-    return [doc for doc, score in results if score >= SIMILARITY_THRESHOLD]
+    filtered_docs = []
+    ssn_related = is_query_about_ssns(query)
+
+    for doc, score in results:
+        if score >= SIMILARITY_THRESHOLD:
+            if not ssn_related:
+                redacted_content = redact_sensitive_info(doc.page_content)
+                doc.page_content = redacted_content
+            filtered_docs.append(doc)
+
+    return filtered_docs
 
 # RAG-based generation logic
 def rag_or_fallback(query):
@@ -59,9 +79,6 @@ rag_chain = RunnableLambda(rag_or_fallback)
 
 # FastAPI setup
 app = FastAPI()
-
-class QueryRequest(BaseModel):
-    query: str
 
 # Minimal Guardrails YAML configuration
 yaml_content = """
@@ -95,7 +112,7 @@ output_checks:
 
   - name: no_ssn_format
     type: regex
-    pattern: '\d{3}-\d{2}-\d{4}'
+    pattern: '\\d{3}-\\d{2}-\\d{4}'
     on_fail: "Detected a pattern resembling a Social Security Number. Do not output SSNs."
 
   - name: limit_response_length
@@ -115,6 +132,12 @@ async def startup_event():
     chain = guardrails | llm
 
 @app.post("/rag")
-async def rag_endpoint(request: QueryRequest):
-    response = await chain.ainvoke(request.query)
-    return {"response": response["output_text"]}
+async def rag_endpoint(request: Request):
+    body = await request.json()
+    query = body.get("query") or body.get("prompt") or body.get("input")
+    if not query:
+        return {"error": "Missing query or prompt field."}
+
+    response = await chain.ainvoke(query)
+    return JSONResponse({"response": response['output_text']})
+
