@@ -1,4 +1,3 @@
-import pdb
 from langchain.schema.runnable import RunnableLambda
 from langchain.chains.question_answering import load_qa_chain
 from langchain_huggingface import HuggingFaceEmbeddings, HuggingFacePipeline
@@ -118,5 +117,4 @@ async def startup_event():
 @app.post("/rag")
 async def rag_endpoint(request: QueryRequest):
     response = await chain.ainvoke(request.query)
-    pdb.set_trace()
     return {"response": response["output_text"]}
