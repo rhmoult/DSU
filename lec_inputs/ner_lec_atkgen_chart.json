@@ -1,0 +1,12 @@
+{
+  "name": "NER - Atkgen",
+  "attacks": [
+    {
+      "name": "Atkgen",
+      "lrs": 0.074,
+      "min": 500,
+      "mode": 5000,
+      "max": 50000
+    }
+  ]
+}

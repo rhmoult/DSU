@@ -1,0 +1,12 @@
+{
+  "name": "NER - PII",
+  "attacks": [
+    {
+      "name": "PII",
+      "lrs": 0.019,
+      "min": 500,
+      "mode": 10000,
+      "max": 100000
+    }
+  ]
+}

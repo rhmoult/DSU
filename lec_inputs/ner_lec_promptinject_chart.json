@@ -1,0 +1,12 @@
+{
+  "name": "NER - PromptInject",
+  "attacks": [
+    {
+      "name": "PromptInject",
+      "lrs": 0.002,
+      "min": 500,
+      "mode": 10000,
+      "max": 100000
+    }
+  ]
+}
