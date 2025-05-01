@@ -1,0 +1,12 @@
+{
+  "name": "ABAC - LatentInjection",
+  "attacks": [
+    {
+      "name": "LatentInjection",
+      "lrs": 0.117,
+      "min": 500,
+      "mode": 10000,
+      "max": 100000
+    }
+  ]
+}

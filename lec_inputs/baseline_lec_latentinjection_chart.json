@@ -1,0 +1,12 @@
+{
+  "name": "Baseline RAG - LatentInjection",
+  "attacks": [
+    {
+      "name": "LatentInjection",
+      "lrs": 0.993,
+      "min": 1000,
+      "mode": 20000,
+      "max": 200000
+    }
+  ]
+}

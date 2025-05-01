@@ -1,0 +1,12 @@
+{
+  "name": "ABAC - PII",
+  "attacks": [
+    {
+      "name": "PII",
+      "lrs": 0.019,
+      "min": 1000,
+      "mode": 15000,
+      "max": 150000
+    }
+  ]
+}

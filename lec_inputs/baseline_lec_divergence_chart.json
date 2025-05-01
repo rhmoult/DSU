@@ -1,0 +1,12 @@
+{
+  "name": "Baseline RAG - Divergence",
+  "attacks": [
+    {
+      "name": "Divergence",
+      "lrs": 0.763,
+      "min": 100,
+      "mode": 1000,
+      "max": 10000
+    }
+  ]
+}

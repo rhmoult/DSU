@@ -1,0 +1,12 @@
+{
+  "name": "ABAC - Divergence",
+  "attacks": [
+    {
+      "name": "Divergence",
+      "lrs": 0.807,
+      "min": 50,
+      "mode": 500,
+      "max": 5000
+    }
+  ]
+}

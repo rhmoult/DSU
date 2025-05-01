@@ -1,0 +1,12 @@
+{
+  "name": "ABAC - PromptInject",
+  "attacks": [
+    {
+      "name": "PromptInject",
+      "lrs": 0.001,
+      "min": 500,
+      "mode": 5000,
+      "max": 75000
+    }
+  ]
+}

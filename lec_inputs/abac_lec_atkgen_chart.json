@@ -1,0 +1,12 @@
+{
+  "name": "ABAC - Atkgen",
+  "attacks": [
+    {
+      "name": "Atkgen",
+      "lrs": 0.111,
+      "min": 250,
+      "mode": 2500,
+      "max": 50000
+    }
+  ]
+}
