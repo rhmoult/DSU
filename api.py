@@ -30,9 +30,6 @@ qa_chain = load_qa_chain(llm, chain_type="stuff")
 SIMILARITY_THRESHOLD = 0.7
 
 # RAG retrieval logic
-def redact_sensitive_info(text):
-    return re.sub(r'\d{3}-\d{2}-\d{4}', '[REDACTED-SSN]', text)
-
 def is_query_about_ssns(query):
     query = query.lower()
     ssn_keywords = ["ssn", "social security number", "social security numbers"]
@@ -41,13 +38,9 @@ def is_query_about_ssns(query):
 def retrieve_docs(query):
     results = vectorstore.similarity_search_with_score(query, k=5)
     filtered_docs = []
-    ssn_related = is_query_about_ssns(query)
 
     for doc, score in results:
         if score >= SIMILARITY_THRESHOLD:
-            if not ssn_related:
-                redacted_content = redact_sensitive_info(doc.page_content)
-                doc.page_content = redacted_content
             filtered_docs.append(doc)
 
     return filtered_docs
