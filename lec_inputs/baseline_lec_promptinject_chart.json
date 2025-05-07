@@ -3,7 +3,7 @@
   "attacks": [
     {
       "name": "PromptInject",
-      "lrs": 0.998,
+      "lrs": 0.9980,
       "min": 1000,
       "mode": 10000,
       "max": 150000

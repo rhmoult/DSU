@@ -1,9 +1,9 @@
 {
-  "name": "ABAC - PromptInject",
+  "name": "NEMO - PromptInject",
   "attacks": [
     {
       "name": "PromptInject",
-      "lrs": 0.0020,
+      "lrs": 0.9980,
       "min": 1000,
       "mode": 10000,
       "max": 150000

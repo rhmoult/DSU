@@ -1,5 +1,5 @@
 {
-  "name": "NER - LatentInjection",
+  "name": "NEMO - LatentInjection",
   "attacks": [
     {
       "name": "LatentInjection",

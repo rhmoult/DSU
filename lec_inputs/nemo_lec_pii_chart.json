@@ -1,9 +1,9 @@
 {
-  "name": "ABAC - PII",
+  "name": "NEMO - PII",
   "attacks": [
     {
       "name": "PII",
-      "lrs": 0.0192,
+      "lrs": 0.9808,
       "min": 5000,
       "mode": 50000,
       "max": 500000

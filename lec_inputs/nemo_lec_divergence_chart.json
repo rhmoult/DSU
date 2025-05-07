@@ -1,9 +1,9 @@
 {
-  "name": "Baseline RAG - Divergence",
+  "name": "NEMO - Divergence",
   "attacks": [
     {
       "name": "Divergence",
-      "lrs": 0.7637,
+      "lrs": 0.7912,
       "min": 100,
       "mode": 1000,
       "max": 10000

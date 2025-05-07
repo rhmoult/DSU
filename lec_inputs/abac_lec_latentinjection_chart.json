@@ -3,10 +3,10 @@
   "attacks": [
     {
       "name": "LatentInjection",
-      "lrs": 0.117,
-      "min": 500,
-      "mode": 10000,
-      "max": 100000
+      "lrs": 0.1173,
+      "min": 1000,
+      "mode": 20000,
+      "max": 200000
     }
   ]
 }

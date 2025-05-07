@@ -3,10 +3,10 @@
   "attacks": [
     {
       "name": "Divergence",
-      "lrs": 0.807,
-      "min": 50,
-      "mode": 500,
-      "max": 5000
+      "lrs": 0.8077,
+      "min": 100,
+      "mode": 1000,
+      "max": 10000
     }
   ]
 }

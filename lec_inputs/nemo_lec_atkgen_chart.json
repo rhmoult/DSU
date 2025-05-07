@@ -1,9 +1,9 @@
 {
-  "name": "NER - Atkgen",
+  "name": "NEMO - Atkgen",
   "attacks": [
     {
       "name": "Atkgen",
-      "lrs": 0.0370,
+      "lrs": 0.0741,
       "min": 500,
       "mode": 5000,
       "max": 100000
